@@ -1,9 +1,9 @@
 from pyrogram import Client, filters
 import requests
-import random
+import PyPDF2
 import os
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup  
-from myrogram import notJoin , forceMe
+
 
 TOKEN = os.environ.get("TOKEN", "")
 
@@ -11,38 +11,48 @@ API_ID = int(os.environ.get("API_ID", ))
 
 API_HASH = os.environ.get("API_HASH", "")
 
+
+
 app = Client("anime-gen", api_id=API_ID, api_hash=API_HASH, bot_token=TOKEN)
 
-regex_photo = ["waifu","neko"]
-pht = random.choice(regex_photo)
-url = f"https://api.waifu.pics/sfw/{pht}"
-      
-@app.on_callback_query()
-async def handle_query(client, query):
-    if query.data == "again":
-     response = requests.get(url).json()
-     up = response['url']
-     if up:
-      but = [[InlineKeyboardButton("Generate again ✨", callback_data=f'again')],
-             [InlineKeyboardButton("Source Code 🌺", url=f'https://github.com/prime-hritu/Anime-Generator-Bot')]]
-      markup = InlineKeyboardMarkup(but)
-      await query.message.reply_photo(up,caption="**@AIanimeGenBot**",reply_markup=markup)
-     else:
-      await query.message.reply("Request failed try /again")
-    		
-@app.on_message(filters.private)
-def get_waifu(client, message):
-    res = forceMe(message.chat.id)
-    if res == "no":
-      return notJoin(client,message)
-    response = requests.get(url).json()
-    up = response['url']
-    if up:
-        button = [[InlineKeyboardButton("Generate again ✨", callback_data=f'again')],
-                  [InlineKeyboardButton("Source Code 🌺", url=f'https://github.com/prime-hritu/Anime-Generator-Bot')]]
-        markup = InlineKeyboardMarkup(button)
-        message.reply_photo(up,caption="**@AIanimeGenBot**",reply_markup=markup)
+
+# Start command
+@app.on_message(filters.command("start"))
+def start(client, message):
+    client.send_message(message.chat.id, "Bot telah dijalankan. Kirim file PDF untuk dikompres.")
+
+# Function to compress PDF file
+def compress_pdf(input_path, output_path):
+    with open(input_path, 'rb') as pdf_file:
+        pdf_reader = PyPDF2.PdfFileReader(pdf_file)
+        pdf_writer = PyPDF2.PdfFileWriter()
+
+        for page_num in range(pdf_reader.getNumPages()):
+            page = pdf_reader.getPage(page_num)
+            page.compressContentStreams()
+            pdf_writer.addPage(page)
+
+        with open(output_path, 'wb') as output_file:
+            pdf_writer.write(output_file)
+
+# Respond to the message containing a PDF file
+@app.on_message(filters.document & ~filters.private)
+def compress_pdf_file(client, message):
+    file_info = message.document
+    file_name = file_info.file_name
+
+    if file_name.endswith('.pdf'):
+        input_path = client.download_media(message, file_name)
+        output_path = f'compressed_{file_name}'
+
+        compress_pdf(input_path, output_path)
+
+        client.send_document(message.chat.id, output_path, caption="File PDF telah dikompres.")
+        os.remove(input_path)  # Remove the original file
+        os.remove(output_path)  # Remove the compressed file
     else:
-        message.reply("Request failed try /again")
+        client.send_message(message.chat.id, "Mohon kirim file PDF saja.")
+
+
         
 app.run()
